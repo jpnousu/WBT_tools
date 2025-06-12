@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.tif
+*.zip
+*.shp*
+.DS_Store
+apikey.txt
