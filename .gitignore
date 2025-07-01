@@ -5,3 +5,5 @@ __pycache__/
 *.shp*
 .DS_Store
 apikey.txt
+.ipynb_checkpoints/
+

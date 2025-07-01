@@ -248,6 +248,65 @@ def rasterize_water_bodies(stream_file=None, river_file=None, lake_file=None, re
     print(f"Hydrological mask raster saved to: {out_raster}")
     return out_raster
 
+def rasterize_shapefile(shapefile, attribute_field, ref_raster, out_raster):
+    """
+    Rasterize a shapefile using a given attribute field, aligning it with a reference raster.
+
+    Parameters:
+        shapefile (str): Path to the input shapefile.
+        attribute_field (str): Name of the field to burn into the raster.
+        ref_raster (str): Path to the reference raster.
+
+    Returns:
+        str: Path to the output rasterized file.
+    """
+    if not all([shapefile, attribute_field, ref_raster]):
+        raise ValueError("shapefile, attribute_field, and ref_raster must all be provided.")
+
+    # Load shapefile
+    gdf = gpd.read_file(shapefile)
+    if attribute_field not in gdf.columns:
+        raise ValueError(f"Field '{attribute_field}' not found in shapefile.")
+
+    # Open reference raster
+    with rasterio.open(ref_raster) as ref:
+        meta = ref.meta.copy()
+        out_shape = (ref.height, ref.width)
+        transform = ref.transform
+        crs = ref.crs
+
+    # Reproject shapefile to match raster CRS if needed
+    if gdf.crs != crs:
+        gdf = gdf.to_crs(crs)
+
+    # Prepare shapes (geometry, value) for rasterization
+    shapes = [
+        (geom, value) for geom, value in zip(gdf.geometry, gdf[attribute_field]) if geom is not None
+    ]
+
+    # Rasterize
+    rasterized = rasterize(
+        shapes,
+        out_shape=out_shape,
+        transform=transform,
+        fill=0,
+        dtype='int32'
+    )
+
+    # Update metadata
+    meta.update({
+        "driver": "GTiff",
+        "dtype": "int32",
+        "count": 1,
+        "compress": "lzw",
+        "nodata": 0
+    })
+
+    with rasterio.open(out_raster, 'w', **meta) as dst:
+        dst.write(rasterized, 1)
+
+    print(f"Rasterized shapefile saved to: {out_raster}")
+    return out_raster
 
 def raster_to_watershed_shapefile(input_raster: str) -> str:
     """
@@ -280,3 +339,60 @@ def raster_to_watershed_shapefile(input_raster: str) -> str:
 
     print(f"Watershed shapefile saved to: {output_shapefile}")
     return output_shapefile
+
+
+def reproj_match(infile, match, outfile, resampling_method='bilinear', save_in='asc'):
+    """Reproject a file to match the shape and projection of existing raster. 
+    
+    Parameters
+    ----------
+    infile : (string) path to input file to reproject
+    match : (string) path to raster with desired shape and projection 
+    outfile : (string) path to output file tif
+    """
+
+    if resampling_method == 'bilinear':
+        resample_as = Resampling.bilinear
+    if resampling_method == 'nearest':
+        resample_as = Resampling.nearest
+    
+    # open input
+    with rasterio.open(infile) as src:
+        src_transform = src.transform
+        
+        # open input to match
+        with rasterio.open(match) as match:
+            dst_crs = match.crs
+            
+            # calculate the output transform matrix
+            dst_transform, dst_width, dst_height = calculate_default_transform(
+                src.crs,     # input CRS
+                dst_crs,     # output CRS
+                match.width,   # input width
+                match.height,  # input height 
+                *match.bounds,  # unpacks input outer boundaries (left, bottom, right, top)
+            )
+
+        # set properties for output
+        dst_kwargs = src.meta.copy()
+        dst_kwargs.update({"crs": dst_crs,
+                           "transform": dst_transform,
+                           "width": dst_width,
+                           "height": dst_height,
+                           "nodata": 0})
+        if save_in=='asc':
+            dst_kwargs.update({"driver": "AAIGrid"})
+            
+        print("Coregistered to shape:", dst_height,dst_width,'\n Affine',dst_transform)
+        # open output
+        with rasterio.open(outfile, "w", **dst_kwargs) as dst:
+            # iterate through bands and write using reproject function
+            for i in range(1, src.count + 1):
+                reproject(
+                    source=rasterio.band(src, i),
+                    destination=rasterio.band(dst, i),
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=dst_transform,
+                    dst_crs=dst_crs,
+                    resampling=resample_as)
