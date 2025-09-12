@@ -19,7 +19,7 @@ from rasterio.plot import show
 #from rasterio.enums import Resampling
 #from rasterio.mask import mask
 #from rasterio.fill import fillnodata
-#from rasterio.warp import reproject, Resampling, calculate_default_transform
+from rasterio.warp import reproject, Resampling, calculate_default_transform
 from rasterio.features import rasterize
 from rasterio.features import shapes
 
@@ -353,6 +353,8 @@ def reproj_match(infile, match, outfile, resampling_method='bilinear', save_in='
 
     if resampling_method == 'bilinear':
         resample_as = Resampling.bilinear
+    if resampling_method == 'average':
+        resample_as = Resampling.average
     if resampling_method == 'nearest':
         resample_as = Resampling.nearest
     
