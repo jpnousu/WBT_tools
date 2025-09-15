@@ -28,6 +28,7 @@ from rasterio.features import shapes
 #from scipy import ndimage
 import geopandas as gpd
 #from rasterio.crs import CRS
+from scipy.ndimage import generic_filter
 
 # plotting
 import matplotlib.pyplot as plt
@@ -289,7 +290,7 @@ def rasterize_shapefile(shapefile, attribute_field, ref_raster, out_raster):
         shapes,
         out_shape=out_shape,
         transform=transform,
-        fill=0,
+        fill=-9999,
         dtype='int32'
     )
 
@@ -299,7 +300,7 @@ def rasterize_shapefile(shapefile, attribute_field, ref_raster, out_raster):
         "dtype": "int32",
         "count": 1,
         "compress": "lzw",
-        "nodata": 0
+        "nodata": -9999
     })
 
     with rasterio.open(out_raster, 'w', **meta) as dst:
@@ -381,7 +382,8 @@ def reproj_match(infile, match, outfile, resampling_method='bilinear', save_in='
                            "transform": dst_transform,
                            "width": dst_width,
                            "height": dst_height,
-                           "nodata": 0})
+                           #"nodata": 0
+                          })
         if save_in=='asc':
             dst_kwargs.update({"driver": "AAIGrid"})
             
@@ -398,3 +400,33 @@ def reproj_match(infile, match, outfile, resampling_method='bilinear', save_in='
                     dst_transform=dst_transform,
                     dst_crs=dst_crs,
                     resampling=resample_as)
+
+
+def reclassify_soil(raster_array, soil_map):
+    """Reclassify soil codes into 1–5 classes."""
+    # Make a copy so original isn’t modified
+    reclassed = np.zeros_like(raster_array, dtype=np.int16)
+    
+    for new_val, codes in soil_map.items():
+        mask = np.isin(raster_array, codes)
+        reclassed[mask] = new_val
+    
+    return reclassed
+
+
+def interpolate_nodata(arr, nodata=-9999, footprint_size=3):
+    """Replace nodata values with the median of surrounding cells."""
+    # Mask nodata as NaN for processing
+    arr_nan = arr.astype(float)
+    arr_nan[arr_nan == nodata] = np.nan
+
+    def nanmedian_filter(values):
+        vals = values[~np.isnan(values)]
+        return np.median(vals) if len(vals) > 0 else nodata
+
+    # Apply median filter on the neighbourhood
+    filtered = generic_filter(arr_nan, nanmedian_filter, size=footprint_size, mode='nearest')
+    
+    # Ensure any remaining NaNs (isolated nodata) are replaced with nodata
+    filtered[np.isnan(filtered)] = nodata
+    return filtered.astype(arr.dtype)
