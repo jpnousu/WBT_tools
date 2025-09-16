@@ -1,0 +1,16 @@
+dem_to_watersheds.ipynb
+- used to test resolution impact on twi, flowacc etc.
+
+csv_to_shape.ipynb
+- converts csv point coordinates to shapefile
+
+delineate_all_dts_points.ipynb
+- tested to delineate all dts stream locations
+
+SpaFHy GIS processing
+- initial_veg.ipynb
+- initial_low_veg.ipynb
+- initial_soil.ipynb
+- initial_streams.ipynb
+- spafhy_dem_layers.ipynb
+- spafhy_gis.ipynb
